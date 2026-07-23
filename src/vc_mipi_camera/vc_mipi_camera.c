@@ -47,6 +47,7 @@ enum private_cids
         V4L2_CID_VC_BINNING_MODE,
         V4L2_CID_LIVE_ROI,
         V4L2_CID_VC_NAME,
+        V4L2_CID_VC_HDR_MODE,
 };
 
 enum pad_types {
@@ -309,6 +310,20 @@ static int vc_sd_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *control)
         case V4L2_CID_LIVE_ROI:
                 return vc_core_live_roi(cam, control->value);
 
+        case V4L2_CID_VC_HDR_MODE:
+                if (!(cam->ctrl.flags & FLAG_CLEAR_HDR)) {
+                        vc_warn(dev, "%s(): Clear HDR not supported by this sensor\n", __func__);
+                        return -EINVAL;
+                }
+                if (cam->state.streaming) {
+                        // WDMODE/COMBI_EN are only latched by the sensor when
+                        // streaming starts (see vc_core_set_clear_hdr_mode()
+                        // in vc_mipi_core.c) - changing them live has no effect.
+                        vc_warn(dev, "%s(): Stop the stream before changing HDR mode\n", __func__);
+                        return -EBUSY;
+                }
+                cam->state.hdr_mode_enabled = control->value;
+                return 0;
 
         default:
                 vc_warn(dev, "%s(): Unknown control 0x%08x\n", __func__, control->id);
@@ -936,6 +951,18 @@ static const struct v4l2_ctrl_config ctrl_name = {
     .def = 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_hdr_mode = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_MODE,
+    .name = "Clear HDR Mode",
+    .type = V4L2_CTRL_TYPE_BOOLEAN,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = 1,
+    .step = 1,
+    .def = 0,
+};
+
 /* Non-const: min/max/def are updated by vc_update_clk_rates() before ctrl creation */
 static struct v4l2_ctrl_config ctrl_hblank = {
     .ops   = &vc_ctrl_ops,
@@ -1230,7 +1257,7 @@ static int vc_sd_init(struct vc_device *device)
         v4l2_i2c_subdev_init(&device->sd, client, &vc_subdev_ops);
 
         // Initialize the handler
-        ret = v4l2_ctrl_handler_init(&device->ctrl_handler, 3);
+        ret = v4l2_ctrl_handler_init(&device->ctrl_handler, 4);
         if (ret)
         {
                 vc_err(dev, "%s(): Failed to init control handler\n", __func__);
@@ -1269,6 +1296,9 @@ static int vc_sd_init(struct vc_device *device)
         ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_binning_mode, &ctrl);
         ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_live_roi, &ctrl);
         ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_name, &ctrl);
+
+        if (device->cam.ctrl.flags & FLAG_CLEAR_HDR)
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_mode, &ctrl);
 
         ret |= vc_ctrl_init_ctrl(device, &device->ctrl_handler, V4L2_CID_PIXEL_RATE, &pixel_rate, 0);
         ret |= vc_ctrl_init_ctrl_lfreq(device, &device->ctrl_handler, V4L2_CID_LINK_FREQ, &linkfreq);
