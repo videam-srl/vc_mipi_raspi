@@ -330,15 +330,18 @@ static int vc_sd_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *control)
                         vc_warn(dev, "%s(): Stop the stream before changing HDR mode\n", __func__);
                         return -EBUSY;
                 }
-                if (control->value && vc_core_mbus_code_to_format(cam->state.format_code) != FORMAT_RAW12) {
-                        // Safe to reject here: this is a plain VIDIOC_S_CTRL on our
-                        // own ctrl_handler, never touches the streaming/rp1-cfe path
-                        // (unlike returning an error from vc_sen_start_stream(),
-                        // which crashes rp1-cfe's error-unwind on this platform -
-                        // see the non-fatal fallback in vc_core_set_clear_hdr_mode()).
-                        vc_warn(dev, "%s(): Clear HDR requires a 12-bit RAW12 format to be "
-                                "negotiated first (e.g. via media-ctl)\n", __func__);
-                        return -EINVAL;
+                if (control->value) {
+                        __u8 hdr_ctrl_format = vc_core_mbus_code_to_format(cam->state.format_code);
+                        if (hdr_ctrl_format != FORMAT_RAW12 && hdr_ctrl_format != FORMAT_RAW10) {
+                                // Safe to reject here: this is a plain VIDIOC_S_CTRL on our
+                                // own ctrl_handler, never touches the streaming/rp1-cfe path
+                                // (unlike returning an error from vc_sen_start_stream(),
+                                // which crashes rp1-cfe's error-unwind on this platform -
+                                // see the non-fatal fallback in vc_core_set_clear_hdr_mode()).
+                                vc_warn(dev, "%s(): Clear HDR requires a 10-bit RAW10 or 12-bit RAW12 "
+                                        "format to be negotiated first (e.g. via media-ctl)\n", __func__);
+                                return -EINVAL;
+                        }
                 }
                 cam->state.hdr_mode_enabled = control->value;
                 return 0;
