@@ -147,3 +147,12 @@ All `hdr_*` controls live on the sensor's V4L2 subdev
 --set-ctrl=hdr_gain_adder=1`. The two threshold and two ratio controls
 show identical truncated names in `v4l2-ctl --list-ctrls` - set them
 unambiguously by numeric ID instead, e.g. `--set-ctrl=0x0098fffd=3000`.
+
+## Combining with 2x2 binning
+
+`binning_mode=1` (1920x1080 output) works together with Clear HDR, but
+needs more `vertical_blanking` than either feature needs alone - both
+features' vertical timing requirements compound. Confirmed working:
+`vertical_blanking=4680` (vs. `2340` for Clear HDR alone at full
+resolution). If binned + HDR frames show entirely-zero rows at the
+bottom of the frame, raise `vertical_blanking` further.
