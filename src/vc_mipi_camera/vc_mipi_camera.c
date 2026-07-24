@@ -48,6 +48,7 @@ enum private_cids
         V4L2_CID_LIVE_ROI,
         V4L2_CID_VC_NAME,
         V4L2_CID_VC_HDR_MODE,
+        V4L2_CID_VC_HDR_GAIN,
 };
 
 enum pad_types {
@@ -334,6 +335,9 @@ static int vc_sd_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *control)
                 }
                 cam->state.hdr_mode_enabled = control->value;
                 return 0;
+
+        case V4L2_CID_VC_HDR_GAIN:
+                return vc_core_set_hdr_gain(cam, control->value);
 
         default:
                 vc_warn(dev, "%s(): Unknown control 0x%08x\n", __func__, control->id);
@@ -973,6 +977,26 @@ static const struct v4l2_ctrl_config ctrl_hdr_mode = {
     .def = 0,
 };
 
+// EXP_GAIN (0x3081): extra gain applied to the short exposure sub-frame
+// before combining with the long exposure. Not latched at stream start
+// (unlike hdr_mode itself) - can be changed live, streaming or not.
+static const char * const hdr_gain_menu[] = {
+    "+0dB", "+6dB", "+12dB", "+18dB", "+24dB", "+29.1dB",
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_gain = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_GAIN,
+    .name = "HDR Gain Adder",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = ARRAY_SIZE(hdr_gain_menu) - 1,
+    .step = 1,
+    .def = 2, // +12dB, matches vc_core_state_init()'s default
+    .qmenu = hdr_gain_menu,
+};
+
 /* Non-const: min/max/def are updated by vc_update_clk_rates() before ctrl creation */
 static struct v4l2_ctrl_config ctrl_hblank = {
     .ops   = &vc_ctrl_ops,
@@ -1307,8 +1331,10 @@ static int vc_sd_init(struct vc_device *device)
         ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_live_roi, &ctrl);
         ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_name, &ctrl);
 
-        if (device->cam.ctrl.flags & FLAG_CLEAR_HDR)
+        if (device->cam.ctrl.flags & FLAG_CLEAR_HDR) {
                 ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_mode, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_gain, &ctrl);
+        }
 
         ret |= vc_ctrl_init_ctrl(device, &device->ctrl_handler, V4L2_CID_PIXEL_RATE, &pixel_rate, 0);
         ret |= vc_ctrl_init_ctrl_lfreq(device, &device->ctrl_handler, V4L2_CID_LINK_FREQ, &linkfreq);
