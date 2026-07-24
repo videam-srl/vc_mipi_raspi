@@ -156,3 +156,20 @@ features' vertical timing requirements compound. Confirmed working:
 `vertical_blanking=4680` (vs. `2340` for Clear HDR alone at full
 resolution). If binned + HDR frames show entirely-zero rows at the
 bottom of the frame, raise `vertical_blanking` further.
+
+## RAW10 output
+
+Clear HDR also works with RAW10 output (`code=0x300f`, not just the
+default RAW12 `0x3012`) - useful when a fixed downstream ISP (e.g. an
+FPGA pipeline) only accepts RAW10 and can't be changed. Negotiate the
+RAW10 format before enabling `clear_hdr_mode` (e.g. via `media-ctl`/
+`v4l2-ctl --set-subdev-fmt`); the driver rejects enabling HDR if a
+non-RAW10/RAW12 format is active.
+
+RAW10 needs *more* `vertical_blanking` than RAW12 for the same feature
+combination, confirmed working:
+- RAW10 + Clear HDR (no binning): `vertical_blanking=4680`
+- RAW10 + Clear HDR + 2x2 binning: `vertical_blanking=4680`
+
+Both were verified on real hardware (full-frame, no zero rows/columns,
+5/5 reproducible captures for the combined RAW10+HDR+binning case).
