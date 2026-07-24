@@ -49,6 +49,13 @@ enum private_cids
         V4L2_CID_VC_NAME,
         V4L2_CID_VC_HDR_MODE,
         V4L2_CID_VC_HDR_GAIN,
+        V4L2_CID_VC_HDR_DATASEL_TH_H,
+        V4L2_CID_VC_HDR_DATASEL_TH_L,
+        V4L2_CID_VC_HDR_DATASEL_BK,
+        V4L2_CID_VC_HDR_GRAD_TH1,
+        V4L2_CID_VC_HDR_GRAD_TH2,
+        V4L2_CID_VC_HDR_GRAD_COMP_L,
+        V4L2_CID_VC_HDR_GRAD_COMP_H,
 };
 
 enum pad_types {
@@ -338,6 +345,34 @@ static int vc_sd_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *control)
 
         case V4L2_CID_VC_HDR_GAIN:
                 return vc_core_set_hdr_gain(cam, control->value);
+
+        case V4L2_CID_VC_HDR_DATASEL_TH_H:
+                cam->state.hdr_datasel_th_h = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_DATASEL_TH_L:
+                cam->state.hdr_datasel_th_l = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_DATASEL_BK:
+                cam->state.hdr_datasel_bk = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_GRAD_TH1:
+                cam->state.hdr_grad_th1 = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_GRAD_TH2:
+                cam->state.hdr_grad_th2 = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_GRAD_COMP_L:
+                cam->state.hdr_grad_comp_l = control->value;
+                return vc_core_set_hdr_curve(cam);
+
+        case V4L2_CID_VC_HDR_GRAD_COMP_H:
+                cam->state.hdr_grad_comp_h = control->value;
+                return vc_core_set_hdr_curve(cam);
 
         default:
                 vc_warn(dev, "%s(): Unknown control 0x%08x\n", __func__, control->id);
@@ -997,6 +1032,113 @@ static const struct v4l2_ctrl_config ctrl_hdr_gain = {
     .qmenu = hdr_gain_menu,
 };
 
+// Gradation-compression curve (see vc_core_set_hdr_curve() in
+// vc_mipi_core.c for the full explanation). All six live-writable,
+// streaming or not - matches Kurokesu's own driver behavior.
+static const struct v4l2_ctrl_config ctrl_hdr_datasel_th_h = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_DATASEL_TH_H,
+    .name = "HDR Data Sel Threshold H",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = 0x0fff,
+    .step = 1,
+    .def = 512,
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_datasel_th_l = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_DATASEL_TH_L,
+    .name = "HDR Data Sel Threshold L",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = 0x0fff,
+    .step = 1,
+    .def = 1024,
+};
+
+static const char * const hdr_datasel_bk_menu[] = {
+    "HG 1/2, LG 1/2",
+    "HG 3/4, LG 1/4",
+    "HG 1/2, LG 1/2",
+    "HG 7/8, LG 1/8",
+    "HG 15/16, LG 1/16",
+    "2nd HG 1/2, LG 1/2",
+    "HG 1/16, LG 15/16",
+    "HG 1/8, LG 7/8",
+    "HG 1/4, LG 3/4",
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_datasel_bk = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_DATASEL_BK,
+    .name = "HDR Data Blending Mode",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = ARRAY_SIZE(hdr_datasel_bk_menu) - 1,
+    .step = 1,
+    .def = 0,
+    .qmenu = hdr_datasel_bk_menu,
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_grad_th1 = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_GRAD_TH1,
+    .name = "HDR Gradient Compression Threshold 1",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = 0x1ffff,
+    .step = 1,
+    .def = 500,
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_grad_th2 = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_GRAD_TH2,
+    .name = "HDR Gradient Compression Threshold 2",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = 0x1ffff,
+    .step = 1,
+    .def = 11500,
+};
+
+static const char * const hdr_grad_comp_menu[] = {
+    "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
+    "1/64", "1/128", "1/256", "1/512", "1/1024", "1/2048",
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_grad_comp_l = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_GRAD_COMP_L,
+    .name = "HDR Gradient Compression Ratio Low",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = ARRAY_SIZE(hdr_grad_comp_menu) - 1,
+    .step = 1,
+    .def = 2, // 1/4
+    .qmenu = hdr_grad_comp_menu,
+};
+
+static const struct v4l2_ctrl_config ctrl_hdr_grad_comp_h = {
+    .ops = &vc_ctrl_ops,
+    .id = V4L2_CID_VC_HDR_GRAD_COMP_H,
+    .name = "HDR Gradient Compression Ratio High",
+    .type = V4L2_CTRL_TYPE_INTEGER,
+    .flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+    .min = 0,
+    .max = ARRAY_SIZE(hdr_grad_comp_menu) - 1,
+    .step = 1,
+    .def = 6, // 1/64
+    .qmenu = hdr_grad_comp_menu,
+};
+
 /* Non-const: min/max/def are updated by vc_update_clk_rates() before ctrl creation */
 static struct v4l2_ctrl_config ctrl_hblank = {
     .ops   = &vc_ctrl_ops,
@@ -1334,6 +1476,13 @@ static int vc_sd_init(struct vc_device *device)
         if (device->cam.ctrl.flags & FLAG_CLEAR_HDR) {
                 ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_mode, &ctrl);
                 ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_gain, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_datasel_th_h, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_datasel_th_l, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_datasel_bk, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_grad_th1, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_grad_th2, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_grad_comp_l, &ctrl);
+                ret |= vc_ctrl_init_custom_ctrl(device, &device->ctrl_handler, &ctrl_hdr_grad_comp_h, &ctrl);
         }
 
         ret |= vc_ctrl_init_ctrl(device, &device->ctrl_handler, V4L2_CID_PIXEL_RATE, &pixel_rate, 0);
