@@ -23,6 +23,18 @@ Then open http://<pi-hostname-or-ip>:8080/ in a browser.
 Requires only what's already on this Pi: numpy, OpenCV (cv2), v4l2-ctl,
 media-ctl.
 
+Testing IMX585 Clear HDR: the driver now refuses to enable clear_hdr_mode
+unless the sensor's negotiated format is already 12-bit RAW12 (Clear HDR's
+compressed output is 12-bit; leaving format at the sensor's default 10-bit
+silently corrupted every frame into a near-black image before this was
+enforced). Switch format *before* setting the control, propagating the
+change through the whole pipeline (setting only the sensor subdev's own
+format is not enough - the CSI receiver's own pad needs it too):
+    media-ctl -d /dev/media0 -V "'vc_mipi_camera <i2c-addr>':0 [fmt:SRGGB12_1X12/WIDTHxHEIGHT]"
+    v4l2-ctl -d /dev/v4l-subdevN --set-ctrl=clear_hdr_mode=1
+This script's own --subdev auto-detection re-reads the format at each
+run, so it will pick up RAW12 correctly once the above has been done.
+
 Bayer pattern caveat: OpenCV's BayerXX2BGR codes and V4L2's SXGGB mbus
 codes don't map 1:1 in an obviously-documented way (this is a
 long-standing source of R/B-swapped or off-by-one-pixel debayering in
